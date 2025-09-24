@@ -38,14 +38,35 @@ jobs:
             cd /home/${{ secrets.SSH_USER }}/excalidraw-hosted
           }
 
-          # Clone or pull latest changes from YOUR repository (not original excalidraw)
-          if [ -d ".git" ]; then
-            echo "Pulling latest changes..."
-            git pull origin main || git pull origin master
+          # First, get the Excalidraw source code
+          if [ -d "excalidraw-source" ]; then
+            echo "Updating Excalidraw source..."
+            cd excalidraw-source
+            git pull origin master
+            cd ..
           else
-            echo "Cloning your repository..."
-            git clone https://github.com/${{ github.repository }}.git .
+            echo "Cloning Excalidraw source..."
+            git clone https://github.com/excalidraw/excalidraw.git excalidraw-source
           fi
+
+          # Then get your deployment configuration
+          if [ -d "deployment-config" ]; then
+            echo "Updating deployment config..."
+            cd deployment-config
+            git pull origin main || git pull origin master
+            cd ..
+          else
+            echo "Cloning deployment config..."
+            git clone https://github.com/${{ github.repository }}.git deployment-config
+          fi
+
+          # Copy deployment files to excalidraw source
+          echo "Setting up deployment configuration..."
+          cp deployment-config/docker-compose.*.yml excalidraw-source/
+          cp deployment-config/nginx-internal.conf excalidraw-source/
+
+          # Work in the excalidraw source directory
+          cd excalidraw-source
 
           # Login to GitHub Container Registry
           echo "Logging in to GitHub Container Registry..."
