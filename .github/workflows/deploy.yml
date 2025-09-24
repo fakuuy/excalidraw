@@ -1,0 +1,78 @@
+name: Deploy Excalidraw to VM
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup SSH key
+      uses: webfactory/ssh-agent@v0.8.0
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+    - name: Add server to known hosts
+      run: |
+        ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+    - name: Deploy to server
+      run: |
+        ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          # Navigate to project directory
+          cd /home/${{ secrets.SSH_USER }}/excalidraw-hosted || {
+            echo "Creating project directory..."
+            mkdir -p /home/${{ secrets.SSH_USER }}/excalidraw-hosted
+            cd /home/${{ secrets.SSH_USER }}/excalidraw-hosted
+          }
+
+          # Clone or pull latest changes
+          if [ -d ".git" ]; then
+            echo "Pulling latest changes..."
+            git pull origin main
+          else
+            echo "Cloning repository..."
+            git clone https://github.com/excalidraw/excalidraw.git .
+          fi
+
+          # Stop existing containers
+          echo "Stopping existing containers..."
+          docker-compose -f docker-compose.prod.yml down || true
+
+          # Build and start containers
+          echo "Building and starting containers..."
+          docker-compose -f docker-compose.prod.yml up -d --build
+
+          # Wait for containers to be healthy
+          echo "Waiting for containers to start..."
+          sleep 30
+
+          # Check status
+          echo "Container status:"
+          docker-compose -f docker-compose.prod.yml ps
+
+          # Test application
+          echo "Testing application..."
+          if curl -f http://localhost/health > /dev/null 2>&1; then
+            echo "✅ Deployment successful - Application is responding!"
+          else
+            echo "⚠️  Application might not be ready yet"
+            exit 1
+          fi
+        EOF
+
+    - name: Notify deployment status
+      if: always()
+      run: |
+        if [ $? -eq 0 ]; then
+          echo "🎉 Deployment to excalidraw.faku.pro completed successfully!"
+        else
+          echo "❌ Deployment failed!"
+          exit 1
+        fi
