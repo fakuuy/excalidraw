@@ -68,9 +68,13 @@ jobs:
 
           echo "Setting up MongoDB and backend..."
 
-          # Login to GitHub Container Registry
-          echo "Logging in to GitHub Container Registry..."
-          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          # Try to login to GitHub Container Registry (fallback if no token)
+          echo "Attempting to login to GitHub Container Registry..."
+          if [ -n "${{ secrets.GHCR_TOKEN }}" ]; then
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin && echo "✅ GHCR login successful" || echo "❌ GHCR login failed, will use local build"
+          else
+            echo "⚠️ GHCR_TOKEN not configured, will use local build only"
+          fi
 
           # Check if docker compose is available (newer version) or docker-compose (legacy)
           if command -v docker &> /dev/null && docker compose version &> /dev/null; then
@@ -142,19 +146,22 @@ jobs:
           # Work in excalidraw source directory for frontend
           cd excalidraw-source
 
-          # Deploy frontend using GHCR
-          echo "Building and deploying frontend to GHCR..."
+          # Deploy frontend (GHCR or local build)
+          echo "Deploying frontend with your customizations..."
 
-          # Build, push to GHCR, and deploy
-          if [ -f "docker-compose.ghcr.yml" ]; then
-            echo "Using GHCR deployment configuration..."
-            # Build and push to registry
-            $DOCKER_COMPOSE -f docker-compose.ghcr.yml build --no-cache
-            $DOCKER_COMPOSE -f docker-compose.ghcr.yml push
-            # Deploy from registry
-            $DOCKER_COMPOSE -f docker-compose.ghcr.yml up -d --force-recreate
+          # Check if GHCR is available and token is configured
+          if [ -n "${{ secrets.GHCR_TOKEN }}" ] && [ -f "docker-compose.ghcr.yml" ] && docker info >/dev/null 2>&1; then
+            echo "Attempting GHCR deployment..."
+            if $DOCKER_COMPOSE -f docker-compose.ghcr.yml build --no-cache && $DOCKER_COMPOSE -f docker-compose.ghcr.yml push; then
+              echo "✅ GHCR build and push successful, deploying from registry..."
+              $DOCKER_COMPOSE -f docker-compose.ghcr.yml up -d --force-recreate
+            else
+              echo "❌ GHCR build/push failed, falling back to local build..."
+              $DOCKER_COMPOSE -f docker-compose.custom.yml build --no-cache
+              $DOCKER_COMPOSE -f docker-compose.custom.yml up -d --force-recreate
+            fi
           else
-            echo "Fallback: Using custom build..."
+            echo "Using local build (GHCR not available)..."
             $DOCKER_COMPOSE -f docker-compose.custom.yml build --no-cache
             $DOCKER_COMPOSE -f docker-compose.custom.yml up -d --force-recreate
           fi
