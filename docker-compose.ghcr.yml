@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   excalidraw:
-    image: ghcr.io/${GITHUB_REPOSITORY:-fakurian/excalidraw-hosted}:latest
+    image: ghcr.io/${GITHUB_REPOSITORY:-fakuuy/excalidraw}:latest
     container_name: excalidraw-app
     restart: unless-stopped
     expose:
