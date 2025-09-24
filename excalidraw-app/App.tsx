@@ -114,7 +114,7 @@ import {
   importUsernameFromLocalStorage,
 } from "./data/localStorage";
 
-import { loadFilesFromFirebase } from "./data/firebase";
+import { customAPI, ensureAuthenticated, loadSceneFromRoom, saveSceneToRoom } from "./data/mongodb-backend";
 import {
   LibraryIndexedDBAdapter,
   LibraryLocalStorageMigrationAdapter,
