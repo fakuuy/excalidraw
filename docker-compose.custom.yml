@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  excalidraw:
+    build:
+      context: .
+      dockerfile: Dockerfile.custom
+      args:
+        - NODE_ENV=production
+    container_name: excalidraw-app-custom
+    restart: unless-stopped
+    expose:
+      - "80"
+    environment:
+      - NODE_ENV=production
+    networks:
+      - excalidraw-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+      interval: 30s
+
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: excalidraw-proxy-custom
+    restart: unless-stopped
+    expose:
+      - "8080"
+    volumes:
+      - ./nginx-internal.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      excalidraw:
+        condition: service_healthy
+    networks:
+      - excalidraw-network
+      - web-proxy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+      interval: 30s
+
+networks:
+  excalidraw-network:
+    driver: bridge
+  web-proxy:
+    external: true

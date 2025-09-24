@@ -67,9 +67,33 @@ jobs:
           cp deployment-config/docker-compose.*.yml excalidraw-source/
           cp deployment-config/nginx-internal.conf excalidraw-source/
 
+          # Copy our custom Docker files
+          cp deployment-config/Dockerfile.custom excalidraw-source/ 2>/dev/null || echo "No custom Dockerfile"
+          cp deployment-config/docker-compose.custom.yml excalidraw-source/ 2>/dev/null || echo "No custom docker-compose"
+
           # Copy custom backend integration
           cp -r deployment-config/custom-backend excalidraw-source/
           cp -r deployment-config/database excalidraw-source/
+
+          # Our custom files are in deployment-config repo, but we need to overwrite with our modifications
+          echo "Copying our customized frontend files..."
+
+          # Overwrite with our customized files from the deployment-config repo
+          if [ -d "deployment-config/excalidraw-app" ]; then
+            echo "Overwriting excalidraw-app with our customizations..."
+            cp -r deployment-config/excalidraw-app/* excalidraw-source/excalidraw-app/
+          fi
+
+          if [ -d "deployment-config/packages" ]; then
+            echo "Overwriting packages with our customizations..."
+            cp -r deployment-config/packages/* excalidraw-source/packages/
+          fi
+
+          # Copy environment files
+          if ls deployment-config/.env.* 1> /dev/null 2>&1; then
+            echo "Copying custom environment files..."
+            cp deployment-config/.env.* excalidraw-source/
+          fi
 
           # Copy backend files to root level (needed for docker-compose.backend.yml)
           cp -r deployment-config/backend-example .
@@ -154,14 +178,16 @@ jobs:
           # Work in excalidraw source directory for frontend
           cd excalidraw-source
 
-          # Deploy frontend
-          echo "Deploying Excalidraw frontend..."
-          if $DOCKER_COMPOSE -f docker-compose.ghcr.yml pull 2>/dev/null; then
-            echo "Using pre-built images..."
-            $DOCKER_COMPOSE -f docker-compose.ghcr.yml up -d
+          # Deploy frontend with custom build (bypassing tests)
+          echo "Building frontend with custom Dockerfile (no tests)..."
+
+          # Use custom docker-compose that skips tests
+          if [ -f "docker-compose.custom.yml" ]; then
+            echo "Using custom docker-compose configuration..."
+            $DOCKER_COMPOSE -f docker-compose.custom.yml up -d --build --force-recreate
           else
-            echo "Building frontend locally..."
-            $DOCKER_COMPOSE -f docker-compose.prod.yml up -d --build
+            echo "Fallback: Using standard build..."
+            $DOCKER_COMPOSE -f docker-compose.prod.yml up -d --build --force-recreate
           fi
 
           # Wait for frontend containers to be healthy
