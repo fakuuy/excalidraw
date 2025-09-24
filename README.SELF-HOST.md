@@ -26,14 +26,91 @@ Self-hosted Excalidraw instance for `excalidraw.faku.pro` with Docker and GitHub
 ### 2. Server Requirements
 
 - Linux VPS/VM with Docker and Docker Compose
-- Port 80 accessible from internet
+- Global Nginx already installed and running
 - SSH access configured
+- Docker containers will run on internal port 8080
 
 ### 3. Domain Configuration
 
 Configure DNS in Cloudflare:
 - A record: `excalidraw` → `your-server-ip`
 - Enable proxy (orange cloud) for SSL termination
+
+### 4. Global Nginx Configuration
+
+Add this configuration to your global nginx for `excalidraw.faku.pro`:
+
+```nginx
+# In your existing nginx sites configuration
+upstream excalidraw_docker {
+    server 127.0.0.1:8080;  # Docker container internal nginx
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    server_name excalidraw.faku.pro;
+
+    # Trust Cloudflare IPs for real IP detection
+    set_real_ip_from 103.21.244.0/22;
+    set_real_ip_from 103.22.200.0/22;
+    set_real_ip_from 103.31.4.0/22;
+    set_real_ip_from 104.16.0.0/13;
+    set_real_ip_from 104.24.0.0/14;
+    set_real_ip_from 108.162.192.0/18;
+    set_real_ip_from 131.0.72.0/22;
+    set_real_ip_from 141.101.64.0/18;
+    set_real_ip_from 162.158.0.0/15;
+    set_real_ip_from 172.64.0.0/13;
+    set_real_ip_from 173.245.48.0/20;
+    set_real_ip_from 188.114.96.0/20;
+    set_real_ip_from 190.93.240.0/20;
+    set_real_ip_from 197.234.240.0/22;
+    set_real_ip_from 198.41.128.0/17;
+    real_ip_header CF-Connecting-IP;
+
+    # Security headers
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    location / {
+        proxy_pass http://excalidraw_docker;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port 443;
+
+        # WebSocket support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    # Static assets caching
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        proxy_pass http://excalidraw_docker;
+        proxy_set_header Host $host;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+}
+```
+
+After adding this configuration, reload nginx:
+```bash
+sudo nginx -t  # Test configuration
+sudo systemctl reload nginx
+```
 
 ## Deployment Options
 
@@ -45,6 +122,10 @@ Uses images from GitHub Container Registry:
 # On your server
 cd ~/excalidraw-hosted
 docker-compose -f docker-compose.ghcr.yml up -d
+
+# Check that containers are running on port 8080
+docker-compose -f docker-compose.ghcr.yml ps
+curl http://localhost:8080/health  # Should return "healthy"
 ```
 
 ### Option 2: Build Locally
@@ -55,6 +136,10 @@ Build images on your server:
 # On your server
 cd ~/excalidraw-hosted
 docker-compose -f docker-compose.prod.yml up -d --build
+
+# Check that containers are running on port 8080
+docker-compose -f docker-compose.prod.yml ps
+curl http://localhost:8080/health  # Should return "healthy"
 ```
 
 ## GitHub Actions Workflows
@@ -77,9 +162,9 @@ docker-compose -f docker-compose.prod.yml up -d --build
 ├── .github/workflows/
 │   ├── build.yml              # Build and push images to GHCR
 │   └── deploy.yml             # Deploy to server via SSH
-├── docker-compose.ghcr.yml    # GHCR-based deployment
-├── docker-compose.prod.yml    # Local build deployment
-├── nginx.conf                 # Nginx reverse proxy config
+├── docker-compose.ghcr.yml    # GHCR-based deployment (port 8080)
+├── docker-compose.prod.yml    # Local build deployment (port 8080)
+├── nginx-internal.conf        # Internal Docker nginx config
 ├── Dockerfile                 # Excalidraw container build
 ├── DEPLOYMENT.md              # Detailed deployment guide
 └── README.SELF-HOST.md        # This file
@@ -107,7 +192,8 @@ Images are automatically built and pushed to:
 ## Monitoring
 
 ### Health Checks
-- Application: `http://localhost/health`
+- Docker container: `http://localhost:8080/health`
+- Via global nginx: `https://excalidraw.faku.pro/health`
 - Container health: `docker-compose ps`
 
 ### Logs
@@ -128,10 +214,11 @@ docker-compose -f docker-compose.ghcr.yml logs -f nginx-proxy
 - Access control via GitHub permissions
 
 ### Network Security
-- Only port 80 exposed (Cloudflare handles HTTPS)
-- Nginx rate limiting configured
-- Security headers implemented
-- Real IP detection for Cloudflare
+- Docker containers run internally on port 8080
+- Global nginx handles external traffic on port 80
+- Cloudflare handles HTTPS termination
+- Security headers implemented in both nginx layers
+- Real IP detection for Cloudflare configured
 
 ## Troubleshooting
 
@@ -139,8 +226,9 @@ docker-compose -f docker-compose.ghcr.yml logs -f nginx-proxy
 
 1. **Image pull fails**: Ensure GITHUB_TOKEN has package read permissions
 2. **SSH connection fails**: Check SSH key configuration and server firewall
-3. **Domain not resolving**: Verify Cloudflare DNS settings
+3. **Domain not resolving**: Verify Cloudflare DNS settings and global nginx config
 4. **Container won't start**: Check logs with `docker-compose logs`
+5. **Port 8080 conflict**: Change port in docker-compose files and global nginx upstream
 
 ### Manual Deployment
 
