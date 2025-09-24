@@ -14,6 +14,7 @@ import { LanguageList } from "../app-language/LanguageList";
 import { isExcalidrawPlusSignedUser } from "../app_constants";
 
 import { saveDebugState } from "./DebugCanvas";
+import { CustomAuthButton, CustomRoomsButton } from "./CustomAuth";
 
 export const AppMainMenu: React.FC<{
   onCollabDialogOpen: () => any;
@@ -23,6 +24,12 @@ export const AppMainMenu: React.FC<{
   setTheme: (theme: Theme | "system") => void;
   refresh: () => void;
 }> = React.memo((props) => {
+  const isExcalidrawPlusEnabled = import.meta.env.VITE_APP_PLUS_LP && import.meta.env.VITE_APP_PLUS_APP;
+
+  const handleCreateRoom = () => {
+    // This will trigger the collaboration dialog which allows creating rooms
+    props.onCollabDialogOpen();
+  };
   return (
     <MainMenu>
       <MainMenu.DefaultItems.LoadScene />
@@ -40,25 +47,40 @@ export const AppMainMenu: React.FC<{
       <MainMenu.DefaultItems.Help />
       <MainMenu.DefaultItems.ClearCanvas />
       <MainMenu.Separator />
-      <MainMenu.ItemLink
-        icon={ExcalLogo}
-        href={`${
-          import.meta.env.VITE_APP_PLUS_LP
-        }/plus?utm_source=excalidraw&utm_medium=app&utm_content=hamburger`}
-        className=""
-      >
-        Excalidraw+
-      </MainMenu.ItemLink>
-      <MainMenu.DefaultItems.Socials />
-      <MainMenu.ItemLink
-        icon={loginIcon}
-        href={`${import.meta.env.VITE_APP_PLUS_APP}${
-          isExcalidrawPlusSignedUser ? "" : "/sign-up"
-        }?utm_source=signin&utm_medium=app&utm_content=hamburger`}
-        className="highlighted"
-      >
-        {isExcalidrawPlusSignedUser ? "Sign in" : "Sign up"}
-      </MainMenu.ItemLink>
+
+      {/* Show Excalidraw+ links only if enabled (they should be disabled in our env) */}
+      {isExcalidrawPlusEnabled && (
+        <>
+          <MainMenu.ItemLink
+            icon={ExcalLogo}
+            href={`${
+              import.meta.env.VITE_APP_PLUS_LP
+            }/plus?utm_source=excalidraw&utm_medium=app&utm_content=hamburger`}
+            className=""
+          >
+            Excalidraw+
+          </MainMenu.ItemLink>
+          <MainMenu.ItemLink
+            icon={loginIcon}
+            href={`${import.meta.env.VITE_APP_PLUS_APP}${
+              isExcalidrawPlusSignedUser ? "" : "/sign-up"
+            }?utm_source=signin&utm_medium=app&utm_content=hamburger`}
+            className="highlighted"
+          >
+            {isExcalidrawPlusSignedUser ? "Sign in" : "Sign up"}
+          </MainMenu.ItemLink>
+        </>
+      )}
+
+      {/* Our custom authentication and room creation */}
+      {!isExcalidrawPlusEnabled && (
+        <>
+          <CustomRoomsButton onCreateRoom={handleCreateRoom} />
+          <CustomAuthButton />
+        </>
+      )}
+
+      {/* Social media links removed as requested */}
       {isDevEnv() && (
         <MainMenu.Item
           icon={eyeIcon}

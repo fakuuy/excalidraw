@@ -13,28 +13,8 @@ export const AppWelcomeScreen: React.FC<{
   const { t } = useI18n();
   let headingContent;
 
-  if (isExcalidrawPlusSignedUser) {
-    headingContent = t("welcomeScreen.app.center_heading_plus")
-      .split(/(Excalidraw\+)/)
-      .map((bit, idx) => {
-        if (bit === "Excalidraw+") {
-          return (
-            <a
-              style={{ pointerEvents: POINTER_EVENTS.inheritFromUI }}
-              href={`${
-                import.meta.env.VITE_APP_PLUS_APP
-              }?utm_source=excalidraw&utm_medium=app&utm_content=welcomeScreenSignedInUser`}
-              key={idx}
-            >
-              Excalidraw+
-            </a>
-          );
-        }
-        return bit;
-      });
-  } else {
-    headingContent = t("welcomeScreen.app.center_heading");
-  }
+  // Use custom heading for our self-hosted version
+  headingContent = "Welcome to Excalidraw - ITICA";
 
   return (
     <WelcomeScreen>
@@ -56,17 +36,18 @@ export const AppWelcomeScreen: React.FC<{
               onSelect={() => props.onCollabDialogOpen()}
             />
           )}
-          {!isExcalidrawPlusSignedUser && (
-            <WelcomeScreen.Center.MenuItemLink
-              href={`${
-                import.meta.env.VITE_APP_PLUS_LP
-              }/plus?utm_source=excalidraw&utm_medium=app&utm_content=welcomeScreenGuest`}
-              shortcut={null}
-              icon={loginIcon}
-            >
-              Sign up
-            </WelcomeScreen.Center.MenuItemLink>
-          )}
+          {/* Custom "Get Started" button that will auto-register users */}
+          <WelcomeScreen.Center.MenuItemButton
+            onSelect={async () => {
+              // Auto-register anonymous user when they click "Get Started"
+              const { ensureAuthenticated } = await import("../data/mongodb-backend");
+              await ensureAuthenticated();
+            }}
+            shortcut={null}
+            icon={loginIcon}
+          >
+            Get Started Free
+          </WelcomeScreen.Center.MenuItemButton>
         </WelcomeScreen.Center.Menu>
       </WelcomeScreen.Center>
     </WelcomeScreen>
