@@ -70,7 +70,10 @@ jobs:
           # Copy custom backend integration
           cp -r deployment-config/custom-backend excalidraw-source/
           cp -r deployment-config/database excalidraw-source/
-          cp -r deployment-config/backend-example excalidraw-source/
+
+          # Copy backend files to root level (needed for docker-compose.backend.yml)
+          cp -r deployment-config/backend-example .
+          cp -r deployment-config/database .
 
           # Copy Docker configs for backend
           cp deployment-config/docker-compose.backend.yml .
@@ -110,9 +113,25 @@ jobs:
           $DOCKER_COMPOSE -f excalidraw-source/docker-compose.ghcr.yml down || true
           $DOCKER_COMPOSE -f excalidraw-source/docker-compose.prod.yml down || true
 
+          # Debug: Check if backend files exist
+          echo "Checking backend files..."
+          ls -la backend-example/ || echo "backend-example directory not found"
+          ls -la database/ || echo "database directory not found"
+          ls -la docker-compose.backend.yml || echo "docker-compose.backend.yml not found"
+
+          echo "Content of docker-compose.backend.yml:"
+          cat docker-compose.backend.yml | head -30
+
+          echo "Checking .env file:"
+          cat .env || echo ".env file not found"
+
           # Deploy backend stack first (MongoDB + API)
           echo "Deploying MongoDB and backend API..."
           $DOCKER_COMPOSE -f docker-compose.backend.yml up -d --build
+
+          # Show build logs if there are errors
+          echo "Backend deployment logs:"
+          $DOCKER_COMPOSE -f docker-compose.backend.yml logs --tail=50
 
           # Wait for backend to be ready
           echo "Waiting for backend services to start..."

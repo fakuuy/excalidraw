@@ -97,18 +97,9 @@ services:
 
 volumes:
   mongodb_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${PWD}/data/mongodb
-
+    name: excalidraw_mongodb_data
   redis_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${PWD}/data/redis
+    name: excalidraw_redis_data
 
 networks:
   backend-network:

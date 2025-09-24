@@ -28,11 +28,25 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/excalidraw', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
+// MongoDB Connection with better error handling
+const connectDB = async () => {
+  try {
+    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/excalidraw';
+    console.log('🔗 Connecting to MongoDB:', mongoUri.replace(/\/\/.*@/, '//***:***@'));
+
+    await mongoose.connect(mongoUri, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+
+    console.log('✅ MongoDB connected successfully');
+  } catch (error) {
+    console.error('❌ MongoDB connection failed:', error.message);
+    process.exit(1);
+  }
+};
+
+connectDB();
 
 // Mongoose Schemas
 const userSchema = new mongoose.Schema({
@@ -479,9 +493,19 @@ app.use('*', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`🚀 Excalidraw API server running on port ${PORT}`);
+
+console.log('🚀 Starting Excalidraw API server...');
+console.log('📋 Environment check:');
+console.log(`   NODE_ENV: ${process.env.NODE_ENV}`);
+console.log(`   PORT: ${PORT}`);
+console.log(`   FRONTEND_URL: ${process.env.FRONTEND_URL}`);
+console.log(`   JWT_SECRET: ${process.env.JWT_SECRET ? '***configured***' : 'NOT SET'}`);
+console.log(`   MONGODB_URI: ${process.env.MONGODB_URI ? '***configured***' : 'NOT SET'}`);
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🎉 Excalidraw API server running on port ${PORT}`);
   console.log(`🎯 Frontend URL: ${process.env.FRONTEND_URL || 'https://excalidraw.faku.pro'}`);
-  console.log(`📊 MongoDB: ${process.env.MONGODB_URI || 'mongodb://localhost:27017/excalidraw'}`);
+  console.log(`📊 MongoDB: Connected`);
   console.log(`✅ All features enabled for FREE!`);
+  console.log(`🔗 Health check: http://localhost:${PORT}/health`);
 });
