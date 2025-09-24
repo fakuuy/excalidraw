@@ -5,6 +5,7 @@
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
+    
 
     @include isMobile {
       height: calc(100vh - 5rem);

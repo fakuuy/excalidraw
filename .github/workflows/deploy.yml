@@ -38,69 +38,33 @@ jobs:
             cd /home/${{ secrets.SSH_USER }}/excalidraw-hosted
           }
 
-          # First, get the Excalidraw source code
+          # Use your customized repository directly instead of Excalidraw original
+          echo "Cloning your customized Excalidraw repository..."
           if [ -d "excalidraw-source" ]; then
-            echo "Updating Excalidraw source..."
+            echo "Updating your customized Excalidraw..."
             cd excalidraw-source
             git pull origin master
             cd ..
           else
-            echo "Cloning Excalidraw source..."
-            git clone https://github.com/excalidraw/excalidraw.git excalidraw-source
+            echo "Cloning your customized repository..."
+            git clone https://github.com/${{ github.repository }}.git excalidraw-source
           fi
 
-          # Get your deployment configuration (this repo)
-          if [ -d "deployment-config" ]; then
-            echo "Updating deployment config..."
-            cd deployment-config
-            git pull origin main || git pull origin master
-            cd ..
-          else
-            echo "Cloning deployment config..."
-            git clone https://github.com/${{ github.repository }}.git deployment-config
-          fi
+          # Debug: Verify we have your customizations
+          echo "=== DEBUGGING: Verifying your customizations ==="
+          ls -la excalidraw-source/excalidraw-app/components/CustomAuth.tsx 2>/dev/null && echo "✅ CustomAuth found" || echo "❌ CustomAuth missing"
+          grep -q "Welcome to Excalidraw - ITICA" excalidraw-source/excalidraw-app/components/AppWelcomeScreen.tsx 2>/dev/null && echo "✅ Custom branding found" || echo "❌ Custom branding missing"
 
           # Set up the complete stack
           echo "Setting up complete Excalidraw stack..."
 
-          # Copy deployment files to excalidraw source
-          cp deployment-config/docker-compose.*.yml excalidraw-source/
-          cp deployment-config/nginx-internal.conf excalidraw-source/
-
-          # Copy our custom Docker files
-          cp deployment-config/Dockerfile.custom excalidraw-source/ 2>/dev/null || echo "No custom Dockerfile"
-          cp deployment-config/docker-compose.custom.yml excalidraw-source/ 2>/dev/null || echo "No custom docker-compose"
-
-          # Copy custom backend integration
-          cp -r deployment-config/custom-backend excalidraw-source/
-          cp -r deployment-config/database excalidraw-source/
-
-          # Our custom files are in deployment-config repo, but we need to overwrite with our modifications
-          echo "Copying our customized frontend files..."
-
-          # Overwrite with our customized files from the deployment-config repo
-          if [ -d "deployment-config/excalidraw-app" ]; then
-            echo "Overwriting excalidraw-app with our customizations..."
-            cp -r deployment-config/excalidraw-app/* excalidraw-source/excalidraw-app/
-          fi
-
-          if [ -d "deployment-config/packages" ]; then
-            echo "Overwriting packages with our customizations..."
-            cp -r deployment-config/packages/* excalidraw-source/packages/
-          fi
-
-          # Copy environment files
-          if ls deployment-config/.env.* 1> /dev/null 2>&1; then
-            echo "Copying custom environment files..."
-            cp deployment-config/.env.* excalidraw-source/
-          fi
-
-          # Copy backend files to root level (needed for docker-compose.backend.yml)
-          cp -r deployment-config/backend-example .
-          cp -r deployment-config/database .
+          # Your repo already has everything, just copy backend files to root level for integrated deployment
+          echo "Setting up backend files for integrated deployment..."
+          cp -r excalidraw-source/backend-example . 2>/dev/null || echo "Backend files already in place"
+          cp -r excalidraw-source/database . 2>/dev/null || echo "Database files already in place"
 
           # Copy Docker configs for backend
-          cp deployment-config/docker-compose.backend.yml .
+          cp excalidraw-source/docker-compose.backend.yml . 2>/dev/null || echo "Backend docker-compose not needed"
 
           echo "Setting up MongoDB and backend..."
 
@@ -153,7 +117,7 @@ jobs:
           echo "Deploying Excalidraw API integrated with existing infrastructure..."
 
           # Copy integrated compose file
-          cp deployment-config/docker-compose.integrated.yml .
+          cp excalidraw-source/docker-compose.integrated.yml .
 
           $DOCKER_COMPOSE -f docker-compose.integrated.yml up -d --build
 
