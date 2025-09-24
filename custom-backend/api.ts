@@ -3,7 +3,7 @@ import type { ExcalidrawElement } from "@excalidraw/element/types";
 import type { AppState, BinaryFileData } from "@excalidraw/excalidraw/types";
 
 // Configuration - replace with your actual API endpoints
-const API_BASE_URL = process.env.VITE_API_BASE_URL || "https://api.itica.lat";
+const API_BASE_URL = process.env.VITE_API_BASE_URL || "https://excalidraw.faku.pro/api";
 
 export interface CustomUser {
   _id: string;

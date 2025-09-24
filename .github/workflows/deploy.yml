@@ -125,25 +125,29 @@ jobs:
           echo "Checking .env file:"
           cat .env || echo ".env file not found"
 
-          # Deploy backend stack first (MongoDB + API)
-          echo "Deploying MongoDB and backend API..."
-          $DOCKER_COMPOSE -f docker-compose.backend.yml up -d --build
+          # Deploy integrated Excalidraw API (uses existing MongoDB)
+          echo "Deploying Excalidraw API integrated with existing infrastructure..."
+
+          # Copy integrated compose file
+          cp deployment-config/docker-compose.integrated.yml .
+
+          $DOCKER_COMPOSE -f docker-compose.integrated.yml up -d --build
 
           # Show build logs if there are errors
-          echo "Backend deployment logs:"
-          $DOCKER_COMPOSE -f docker-compose.backend.yml logs --tail=50
+          echo "Excalidraw API deployment logs:"
+          $DOCKER_COMPOSE -f docker-compose.integrated.yml logs --tail=50
 
-          # Wait for backend to be ready
-          echo "Waiting for backend services to start..."
+          # Wait for API to be ready
+          echo "Waiting for Excalidraw API to start..."
           sleep 60
 
-          # Check backend health
+          # Check API health
           for i in {1..30}; do
-            if curl -f http://localhost:3001/health > /dev/null 2>&1; then
-              echo "✅ Backend is healthy!"
+            if curl -f http://localhost:3002/health > /dev/null 2>&1; then
+              echo "✅ Excalidraw API is healthy!"
               break
             fi
-            echo "Waiting for backend... ($i/30)"
+            echo "Waiting for Excalidraw API... ($i/30)"
             sleep 5
           done
 
@@ -179,11 +183,11 @@ jobs:
           # Test all services
           echo "Testing complete stack..."
 
-          # Test backend API
-          if curl -f http://localhost:3001/health > /dev/null 2>&1; then
-            echo "✅ Backend API is healthy!"
+          # Test Excalidraw API
+          if curl -f http://localhost:3002/health > /dev/null 2>&1; then
+            echo "✅ Excalidraw API is healthy!"
           else
-            echo "❌ Backend API is not responding"
+            echo "❌ Excalidraw API is not responding"
             exit 1
           fi
 
@@ -195,19 +199,13 @@ jobs:
             exit 1
           fi
 
-          # Run MongoDB setup
-          echo "Setting up MongoDB database..."
-          docker exec excalidraw-mongodb mongosh --eval "
-            use excalidraw;
-            db.createCollection('users');
-            db.createCollection('rooms');
-            db.createCollection('scenes');
-            print('✅ MongoDB collections created');
-          " || echo "MongoDB setup completed or already exists"
+          # Database setup is handled by db-init container
+          echo "Database initialization handled by integrated setup"
 
-          echo "🎉 Complete stack deployment successful!"
+          echo "🎉 Complete integrated deployment successful!"
           echo "Frontend: https://excalidraw.faku.pro"
-          echo "Backend API: https://api.itica.lat"
+          echo "Excalidraw API: http://localhost:3002 (internal)"
+          echo "Using existing MongoDB: itica_mongodb"
         EOF
 
     - name: Notify deployment status
