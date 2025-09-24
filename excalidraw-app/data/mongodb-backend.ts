@@ -1,5 +1,5 @@
 // Custom MongoDB Backend Integration
-import type { ExcalidrawElement } from "@excalidraw/element/types";
+import type { ExcalidrawElement, FileId } from "@excalidraw/element/types";
 import type { AppState, BinaryFileData, BinaryFiles } from "@excalidraw/excalidraw/types";
 import type { ImportedDataState } from "@excalidraw/excalidraw/data/types";
 import { restore } from "@excalidraw/excalidraw/data/restore";
@@ -279,6 +279,35 @@ export const saveSceneToRoom = async (
       error: error instanceof Error ? error.message : 'Unknown error'
     };
   }
+};
+
+// File loading function (replaces loadFilesFromFirebase)
+export const loadFilesFromMongoDB = async (
+  roomId: string,
+  fileIds: readonly FileId[]
+): Promise<{ loadedFiles: BinaryFileData[]; erroredFiles: Map<FileId, true> }> => {
+  const loadedFiles: BinaryFileData[] = [];
+  const erroredFiles = new Map<FileId, true>();
+
+  for (const fileId of fileIds) {
+    try {
+      const fileData = await customAPI.getFile(roomId, fileId);
+      if (fileData) {
+        loadedFiles.push({
+          id: fileId,
+          mimeType: fileData.mimeType,
+          dataURL: fileData.dataURL,
+          created: fileData.created,
+          lastRetrieved: fileData.lastRetrieved,
+        });
+      }
+    } catch (error) {
+      console.warn(`Failed to load file ${fileId}:`, error);
+      erroredFiles.set(fileId, true);
+    }
+  }
+
+  return { loadedFiles, erroredFiles };
 };
 
 // Auto-login for anonymous users

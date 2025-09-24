@@ -114,7 +114,7 @@ import {
   importUsernameFromLocalStorage,
 } from "./data/localStorage";
 
-import { customAPI, ensureAuthenticated, loadSceneFromRoom, saveSceneToRoom } from "./data/mongodb-backend";
+import { customAPI, ensureAuthenticated, loadSceneFromRoom, saveSceneToRoom, loadFilesFromMongoDB } from "./data/mongodb-backend";
 import {
   LibraryIndexedDBAdapter,
   LibraryLocalStorageMigrationAdapter,
@@ -433,12 +433,9 @@ const ExcalidrawWrapper = () => {
             return acc;
           }, [] as FileId[]) || [];
 
-        if (data.isExternalScene) {
-          loadFilesFromFirebase(
-            `${FIREBASE_STORAGE_PREFIXES.shareLinkFiles}/${data.id}`,
-            data.key,
-            fileIds,
-          ).then(({ loadedFiles, erroredFiles }) => {
+        if (data.isExternalScene && data.id) {
+          // For external scenes, we'll load files from our MongoDB backend using the scene/room ID
+          loadFilesFromMongoDB(data.id, fileIds).then(({ loadedFiles, erroredFiles }) => {
             excalidrawAPI.addFiles(loadedFiles);
             updateStaleImageStatuses({
               excalidrawAPI,
