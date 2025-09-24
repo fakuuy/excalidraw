@@ -95,10 +95,14 @@ jobs:
 
           echo "Using: $DOCKER_COMPOSE"
 
-          # Set environment variables for production
-          export MONGO_ROOT_PASSWORD='${{ secrets.MONGO_ROOT_PASSWORD }}'
-          export JWT_SECRET='${{ secrets.JWT_SECRET }}'
-          export REDIS_PASSWORD='${{ secrets.REDIS_PASSWORD }}'
+          # Create .env file for docker-compose (safer than export)
+          cat > .env << 'ENVEOF'
+          MONGO_ROOT_PASSWORD=${{ secrets.MONGO_ROOT_PASSWORD }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+          ENVEOF
+
+          echo "Environment variables written to .env file"
 
           # Stop existing containers (both frontend and backend)
           echo "Stopping existing containers..."
