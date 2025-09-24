@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { loginIcon, userIcon } from "@excalidraw/excalidraw/components/icons";
+import { loginIcon, usersIcon } from "@excalidraw/excalidraw/components/icons";
 import { MainMenu } from "@excalidraw/excalidraw/index";
 import { customAPI, getCurrentUser, ensureAuthenticated } from "../data/mongodb-backend";
 import type { CustomUser } from "../data/mongodb-backend";
@@ -55,7 +55,7 @@ export const CustomAuthButton: React.FC = React.memo(() => {
 
   return (
     <MainMenu.Item
-      icon={user ? userIcon : loginIcon}
+      icon={user ? usersIcon : loginIcon}
       onClick={handleAuthClick}
       className={user ? "" : "highlighted"}
     >
