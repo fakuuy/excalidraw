@@ -28,8 +28,8 @@ Descripción: Password para el usuario root de MongoDB
 #### Authentication
 ```
 JWT_SECRET
-Valor: tu-jwt-secret-key-super-largo-y-seguro-2024-excalidraw
-Descripción: Clave secreta para firmar tokens JWT (mínimo 32 caracteres)
+Valor: ExCaLiDrAw-JWT-2024-ITICA-Super-Long-Secret-Key-With-Numbers-123456789
+Descripción: Clave secreta para firmar tokens JWT (mínimo 50 caracteres, sin caracteres especiales problemáticos)
 ```
 
 #### Optional (Redis)
@@ -43,10 +43,21 @@ Descripción: Password para Redis (opcional, para cache de sesiones)
 
 ```bash
 # STRONG passwords - cambia estos valores!
-MONGO_ROOT_PASSWORD=ExCaLiDrAw2024!MongoSecurePass
-JWT_SECRET=ExCaLiDrAw-JWT-Secret-Key-2024-ITICA-Super-Long-And-Secure
-REDIS_PASSWORD=ReDiS-ExCaLiDrAw-2024-Cache-Pass
+MONGO_ROOT_PASSWORD=ExCaLiDrAw2024MongoSecurePass987654321
+JWT_SECRET=ExCaLiDrAw-JWT-Secret-Key-2024-ITICA-Super-Long-And-Secure-Without-Special-Chars
+REDIS_PASSWORD=ReDiS-ExCaLiDrAw-2024-Cache-Pass123456789
 ```
+
+## ⚠️ Caracteres Problemáticos
+
+**EVITA estos caracteres en los secrets** (pueden causar errores de sintaxis):
+- `$` `(` `)` `[` `]` `{` `}` `"` `'` `` ` `` `\` `|` `&` `;`
+
+**USA solo estos caracteres seguros**:
+- Letras: `A-Z a-z`
+- Números: `0-9`
+- Guiones: `-` `_`
+- Puntos: `.`
 
 ## ⚠️ Importante
 

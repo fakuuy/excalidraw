@@ -96,9 +96,9 @@ jobs:
           echo "Using: $DOCKER_COMPOSE"
 
           # Set environment variables for production
-          export MONGO_ROOT_PASSWORD="${{ secrets.MONGO_ROOT_PASSWORD }}"
-          export JWT_SECRET="${{ secrets.JWT_SECRET }}"
-          export REDIS_PASSWORD="${{ secrets.REDIS_PASSWORD }}"
+          export MONGO_ROOT_PASSWORD='${{ secrets.MONGO_ROOT_PASSWORD }}'
+          export JWT_SECRET='${{ secrets.JWT_SECRET }}'
+          export REDIS_PASSWORD='${{ secrets.REDIS_PASSWORD }}'
 
           # Stop existing containers (both frontend and backend)
           echo "Stopping existing containers..."
