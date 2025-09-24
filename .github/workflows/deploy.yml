@@ -68,9 +68,8 @@ jobs:
 
           echo "Setting up MongoDB and backend..."
 
-          # Login to GitHub Container Registry
-          echo "Logging in to GitHub Container Registry..."
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          # Skip GitHub Container Registry login - we'll build locally
+          echo "Skipping GHCR login - building locally instead..."
 
           # Check if docker compose is available (newer version) or docker-compose (legacy)
           if command -v docker &> /dev/null && docker compose version &> /dev/null; then
@@ -142,16 +141,18 @@ jobs:
           # Work in excalidraw source directory for frontend
           cd excalidraw-source
 
-          # Deploy frontend with custom build (bypassing tests)
-          echo "Building frontend with custom Dockerfile (no tests)..."
+          # Deploy frontend with local build only (no remote images)
+          echo "Building frontend locally with your customizations..."
 
-          # Use custom docker-compose that skips tests
+          # Use custom docker-compose that skips tests and builds locally
           if [ -f "docker-compose.custom.yml" ]; then
-            echo "Using custom docker-compose configuration..."
-            $DOCKER_COMPOSE -f docker-compose.custom.yml up -d --build --force-recreate
+            echo "Using custom docker-compose configuration (local build)..."
+            $DOCKER_COMPOSE -f docker-compose.custom.yml build --no-cache
+            $DOCKER_COMPOSE -f docker-compose.custom.yml up -d --force-recreate
           else
-            echo "Fallback: Using standard build..."
-            $DOCKER_COMPOSE -f docker-compose.prod.yml up -d --build --force-recreate
+            echo "Fallback: Using standard build (local only)..."
+            $DOCKER_COMPOSE -f docker-compose.prod.yml build --no-cache
+            $DOCKER_COMPOSE -f docker-compose.prod.yml up -d --force-recreate
           fi
 
           # Wait for frontend containers to be healthy
@@ -163,11 +164,15 @@ jobs:
 
           # Check status of all services
           echo "=== BACKEND SERVICES STATUS ==="
-          $DOCKER_COMPOSE -f docker-compose.backend.yml ps
+          $DOCKER_COMPOSE -f docker-compose.integrated.yml ps
 
           echo "=== FRONTEND SERVICES STATUS ==="
           cd excalidraw-source
-          $DOCKER_COMPOSE -f docker-compose.ghcr.yml ps 2>/dev/null || $DOCKER_COMPOSE -f docker-compose.prod.yml ps
+          if [ -f "docker-compose.custom.yml" ]; then
+            $DOCKER_COMPOSE -f docker-compose.custom.yml ps
+          else
+            $DOCKER_COMPOSE -f docker-compose.prod.yml ps
+          fi
           cd ..
 
           # Test all services
