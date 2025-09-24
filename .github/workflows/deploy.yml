@@ -49,7 +49,7 @@ jobs:
             git clone https://github.com/excalidraw/excalidraw.git excalidraw-source
           fi
 
-          # Then get your deployment configuration
+          # Get your deployment configuration (this repo)
           if [ -d "deployment-config" ]; then
             echo "Updating deployment config..."
             cd deployment-config
@@ -60,13 +60,22 @@ jobs:
             git clone https://github.com/${{ github.repository }}.git deployment-config
           fi
 
+          # Set up the complete stack
+          echo "Setting up complete Excalidraw stack..."
+
           # Copy deployment files to excalidraw source
-          echo "Setting up deployment configuration..."
           cp deployment-config/docker-compose.*.yml excalidraw-source/
           cp deployment-config/nginx-internal.conf excalidraw-source/
 
-          # Work in the excalidraw source directory
-          cd excalidraw-source
+          # Copy custom backend integration
+          cp -r deployment-config/custom-backend excalidraw-source/
+          cp -r deployment-config/database excalidraw-source/
+          cp -r deployment-config/backend-example excalidraw-source/
+
+          # Copy Docker configs for backend
+          cp deployment-config/docker-compose.backend.yml .
+
+          echo "Setting up MongoDB and backend..."
 
           # Login to GitHub Container Registry
           echo "Logging in to GitHub Container Registry..."
@@ -86,43 +95,106 @@ jobs:
 
           echo "Using: $DOCKER_COMPOSE"
 
-          # Stop existing containers
-          echo "Stopping existing containers..."
-          $DOCKER_COMPOSE -f docker-compose.ghcr.yml down || true
+          # Set environment variables for production
+          export MONGO_ROOT_PASSWORD="${{ secrets.MONGO_ROOT_PASSWORD }}"
+          export JWT_SECRET="${{ secrets.JWT_SECRET }}"
+          export REDIS_PASSWORD="${{ secrets.REDIS_PASSWORD }}"
 
-          # Try to pull images, if that fails, build locally
-          echo "Attempting to pull latest images..."
-          if $DOCKER_COMPOSE -f docker-compose.ghcr.yml pull; then
-            echo "Successfully pulled images, starting containers..."
+          # Stop existing containers (both frontend and backend)
+          echo "Stopping existing containers..."
+          $DOCKER_COMPOSE -f docker-compose.backend.yml down || true
+          $DOCKER_COMPOSE -f excalidraw-source/docker-compose.ghcr.yml down || true
+          $DOCKER_COMPOSE -f excalidraw-source/docker-compose.prod.yml down || true
+
+          # Deploy backend stack first (MongoDB + API)
+          echo "Deploying MongoDB and backend API..."
+          $DOCKER_COMPOSE -f docker-compose.backend.yml up -d --build
+
+          # Wait for backend to be ready
+          echo "Waiting for backend services to start..."
+          sleep 60
+
+          # Check backend health
+          for i in {1..30}; do
+            if curl -f http://localhost:3001/health > /dev/null 2>&1; then
+              echo "✅ Backend is healthy!"
+              break
+            fi
+            echo "Waiting for backend... ($i/30)"
+            sleep 5
+          done
+
+          # Work in excalidraw source directory for frontend
+          cd excalidraw-source
+
+          # Deploy frontend
+          echo "Deploying Excalidraw frontend..."
+          if $DOCKER_COMPOSE -f docker-compose.ghcr.yml pull 2>/dev/null; then
+            echo "Using pre-built images..."
             $DOCKER_COMPOSE -f docker-compose.ghcr.yml up -d
           else
-            echo "Failed to pull images, building locally..."
+            echo "Building frontend locally..."
             $DOCKER_COMPOSE -f docker-compose.prod.yml up -d --build
           fi
 
-          # Wait for containers to be healthy
-          echo "Waiting for containers to start..."
+          # Wait for frontend containers to be healthy
+          echo "Waiting for frontend containers to start..."
           sleep 30
 
-          # Check status (check both possible compose files)
-          echo "Container status:"
-          $DOCKER_COMPOSE -f docker-compose.ghcr.yml ps 2>/dev/null || $DOCKER_COMPOSE -f docker-compose.prod.yml ps
+          # Go back to main directory for status checks
+          cd ..
 
-          # Test application (check internal port 8080 since no external port is exposed)
-          echo "Testing application..."
-          if curl -f http://localhost:8080/health > /dev/null 2>&1; then
-            echo "✅ Deployment successful - Application is responding!"
+          # Check status of all services
+          echo "=== BACKEND SERVICES STATUS ==="
+          $DOCKER_COMPOSE -f docker-compose.backend.yml ps
+
+          echo "=== FRONTEND SERVICES STATUS ==="
+          cd excalidraw-source
+          $DOCKER_COMPOSE -f docker-compose.ghcr.yml ps 2>/dev/null || $DOCKER_COMPOSE -f docker-compose.prod.yml ps
+          cd ..
+
+          # Test all services
+          echo "Testing complete stack..."
+
+          # Test backend API
+          if curl -f http://localhost:3001/health > /dev/null 2>&1; then
+            echo "✅ Backend API is healthy!"
           else
-            echo "⚠️  Application might not be ready yet"
+            echo "❌ Backend API is not responding"
             exit 1
           fi
+
+          # Test frontend application
+          if curl -f http://localhost:8080/health > /dev/null 2>&1; then
+            echo "✅ Frontend is healthy!"
+          else
+            echo "❌ Frontend is not responding"
+            exit 1
+          fi
+
+          # Run MongoDB setup
+          echo "Setting up MongoDB database..."
+          docker exec excalidraw-mongodb mongosh --eval "
+            use excalidraw;
+            db.createCollection('users');
+            db.createCollection('rooms');
+            db.createCollection('scenes');
+            print('✅ MongoDB collections created');
+          " || echo "MongoDB setup completed or already exists"
+
+          echo "🎉 Complete stack deployment successful!"
+          echo "Frontend: https://excalidraw.faku.pro"
+          echo "Backend API: https://api.itica.lat"
         EOF
 
     - name: Notify deployment status
       if: always()
       run: |
         if [ $? -eq 0 ]; then
-          echo "🎉 Deployment to excalidraw.faku.pro completed successfully!"
+          echo "🎉 Complete stack deployment to excalidraw.faku.pro successful!"
+          echo "✅ MongoDB + Backend API + Frontend all running"
+          echo "🔗 Frontend: https://excalidraw.faku.pro"
+          echo "🔗 Backend: https://api.itica.lat"
         else
           echo "❌ Deployment failed!"
           exit 1

@@ -1,0 +1,121 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: excalidraw-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-excalidraw123}
+      MONGO_INITDB_DATABASE: excalidraw
+    volumes:
+      - mongodb_data:/data/db
+      - ./database/mongodb-init.js:/docker-entrypoint-initdb.d/init.js:ro
+    ports:
+      - "27017:27017"
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+      interval: 30s
+
+  # Backend API
+  excalidraw-api:
+    build:
+      context: ./backend-example
+      dockerfile: Dockerfile
+    container_name: excalidraw-api
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://admin:${MONGO_ROOT_PASSWORD:-excalidraw123}@mongodb:27017/excalidraw?authSource=admin
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      - FRONTEND_URL=https://excalidraw.faku.pro
+      - PORT=3001
+    ports:
+      - "3001:3001"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - backend-network
+      - web-proxy
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+      interval: 30s
+
+  # Redis for session management (optional)
+  redis:
+    image: redis:7.2-alpine
+    container_name: excalidraw-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend-network
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis123}
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+      interval: 30s
+
+  # Nginx for API (optional - if you want dedicated nginx for API)
+  api-nginx:
+    image: nginx:alpine
+    container_name: excalidraw-api-nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx-api.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      excalidraw-api:
+        condition: service_healthy
+    networks:
+      - backend-network
+      - web-proxy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+      interval: 30s
+
+volumes:
+  mongodb_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/data/mongodb
+
+  redis_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/data/redis
+
+networks:
+  backend-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+  web-proxy:
+    external: true
