@@ -50,7 +50,7 @@ exports[`Test MobileMenu > should initialize with welcome screen and hide once u
   <div
     class="welcome-screen-center__heading welcome-screen-decor excalifont"
   >
-    All your data is saved locally in your browser.
+    Welcome to Excalidraw - ITICA
   </div>
   <div
     class="welcome-screen-menu"
@@ -195,11 +195,9 @@ exports[`Test MobileMenu > should initialize with welcome screen and hide once u
         Live collaboration...
       </div>
     </button>
-    <a
+    <button
       class="welcome-screen-menu-item "
-      href="undefined/plus?utm_source=excalidraw&utm_medium=app&utm_content=welcomeScreenGuest"
-      rel="noopener"
-      target="_blank"
+      type="button"
     >
       <div
         class="welcome-screen-menu-item__icon"
@@ -239,9 +237,9 @@ exports[`Test MobileMenu > should initialize with welcome screen and hide once u
       <div
         class="welcome-screen-menu-item__text"
       >
-        Sign up
+        Get Started Free
       </div>
-    </a>
+    </button>
   </div>
 </div>
 `;
