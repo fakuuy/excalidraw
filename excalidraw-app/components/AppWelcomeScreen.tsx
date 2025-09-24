@@ -37,7 +37,7 @@ export const AppWelcomeScreen: React.FC<{
             />
           )}
           {/* Custom "Get Started" button that will auto-register users */}
-          <WelcomeScreen.Center.MenuItemButton
+          <WelcomeScreen.Center.MenuItem
             onSelect={async () => {
               // Auto-register anonymous user when they click "Get Started"
               const { ensureAuthenticated } = await import("../data/mongodb-backend");
@@ -47,7 +47,7 @@ export const AppWelcomeScreen: React.FC<{
             icon={loginIcon}
           >
             Get Started Free
-          </WelcomeScreen.Center.MenuItemButton>
+          </WelcomeScreen.Center.MenuItem>
         </WelcomeScreen.Center.Menu>
       </WelcomeScreen.Center>
     </WelcomeScreen>
