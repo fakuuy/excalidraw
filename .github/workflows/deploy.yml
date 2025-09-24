@@ -68,8 +68,9 @@ jobs:
 
           echo "Setting up MongoDB and backend..."
 
-          # Skip GitHub Container Registry login - we'll build locally
-          echo "Skipping GHCR login - building locally instead..."
+          # Login to GitHub Container Registry
+          echo "Logging in to GitHub Container Registry..."
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
           # Check if docker compose is available (newer version) or docker-compose (legacy)
           if command -v docker &> /dev/null && docker compose version &> /dev/null; then
@@ -141,18 +142,21 @@ jobs:
           # Work in excalidraw source directory for frontend
           cd excalidraw-source
 
-          # Deploy frontend with local build only (no remote images)
-          echo "Building frontend locally with your customizations..."
+          # Deploy frontend using GHCR
+          echo "Building and deploying frontend to GHCR..."
 
-          # Use custom docker-compose that skips tests and builds locally
-          if [ -f "docker-compose.custom.yml" ]; then
-            echo "Using custom docker-compose configuration (local build)..."
+          # Build, push to GHCR, and deploy
+          if [ -f "docker-compose.ghcr.yml" ]; then
+            echo "Using GHCR deployment configuration..."
+            # Build and push to registry
+            $DOCKER_COMPOSE -f docker-compose.ghcr.yml build --no-cache
+            $DOCKER_COMPOSE -f docker-compose.ghcr.yml push
+            # Deploy from registry
+            $DOCKER_COMPOSE -f docker-compose.ghcr.yml up -d --force-recreate
+          else
+            echo "Fallback: Using custom build..."
             $DOCKER_COMPOSE -f docker-compose.custom.yml build --no-cache
             $DOCKER_COMPOSE -f docker-compose.custom.yml up -d --force-recreate
-          else
-            echo "Fallback: Using standard build (local only)..."
-            $DOCKER_COMPOSE -f docker-compose.prod.yml build --no-cache
-            $DOCKER_COMPOSE -f docker-compose.prod.yml up -d --force-recreate
           fi
 
           # Wait for frontend containers to be healthy
@@ -168,7 +172,9 @@ jobs:
 
           echo "=== FRONTEND SERVICES STATUS ==="
           cd excalidraw-source
-          if [ -f "docker-compose.custom.yml" ]; then
+          if [ -f "docker-compose.ghcr.yml" ]; then
+            $DOCKER_COMPOSE -f docker-compose.ghcr.yml ps
+          elif [ -f "docker-compose.custom.yml" ]; then
             $DOCKER_COMPOSE -f docker-compose.custom.yml ps
           else
             $DOCKER_COMPOSE -f docker-compose.prod.yml ps
