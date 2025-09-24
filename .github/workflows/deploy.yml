@@ -51,14 +51,28 @@ jobs:
           echo "Logging in to GitHub Container Registry..."
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
+          # Check if docker compose is available (newer version) or docker-compose (legacy)
+          if command -v docker &> /dev/null && docker compose version &> /dev/null; then
+            DOCKER_COMPOSE="docker compose"
+          elif command -v docker-compose &> /dev/null; then
+            DOCKER_COMPOSE="docker-compose"
+          else
+            echo "Installing docker-compose..."
+            sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+            sudo chmod +x /usr/local/bin/docker-compose
+            DOCKER_COMPOSE="docker-compose"
+          fi
+
+          echo "Using: $DOCKER_COMPOSE"
+
           # Stop existing containers
           echo "Stopping existing containers..."
-          docker-compose -f docker-compose.ghcr.yml down || true
+          $DOCKER_COMPOSE -f docker-compose.ghcr.yml down || true
 
           # Pull and start containers
           echo "Pulling latest image and starting containers..."
-          docker-compose -f docker-compose.ghcr.yml pull
-          docker-compose -f docker-compose.ghcr.yml up -d
+          $DOCKER_COMPOSE -f docker-compose.ghcr.yml pull
+          $DOCKER_COMPOSE -f docker-compose.ghcr.yml up -d
 
           # Wait for containers to be healthy
           echo "Waiting for containers to start..."
@@ -66,11 +80,11 @@ jobs:
 
           # Check status
           echo "Container status:"
-          docker-compose -f docker-compose.ghcr.yml ps
+          $DOCKER_COMPOSE -f docker-compose.ghcr.yml ps
 
-          # Test application
+          # Test application (check internal port 8080 since no external port is exposed)
           echo "Testing application..."
-          if curl -f http://localhost/health > /dev/null 2>&1; then
+          if curl -f http://localhost:8080/health > /dev/null 2>&1; then
             echo "✅ Deployment successful - Application is responding!"
           else
             echo "⚠️  Application might not be ready yet"
