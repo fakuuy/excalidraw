@@ -38,13 +38,13 @@ jobs:
             cd /home/${{ secrets.SSH_USER }}/excalidraw-hosted
           }
 
-          # Clone or pull latest changes
+          # Clone or pull latest changes from YOUR repository (not original excalidraw)
           if [ -d ".git" ]; then
             echo "Pulling latest changes..."
-            git pull origin main
+            git pull origin main || git pull origin master
           else
-            echo "Cloning repository..."
-            git clone https://github.com/excalidraw/excalidraw.git .
+            echo "Cloning your repository..."
+            git clone https://github.com/${{ github.repository }}.git .
           fi
 
           # Login to GitHub Container Registry
@@ -69,18 +69,23 @@ jobs:
           echo "Stopping existing containers..."
           $DOCKER_COMPOSE -f docker-compose.ghcr.yml down || true
 
-          # Pull and start containers
-          echo "Pulling latest image and starting containers..."
-          $DOCKER_COMPOSE -f docker-compose.ghcr.yml pull
-          $DOCKER_COMPOSE -f docker-compose.ghcr.yml up -d
+          # Try to pull images, if that fails, build locally
+          echo "Attempting to pull latest images..."
+          if $DOCKER_COMPOSE -f docker-compose.ghcr.yml pull; then
+            echo "Successfully pulled images, starting containers..."
+            $DOCKER_COMPOSE -f docker-compose.ghcr.yml up -d
+          else
+            echo "Failed to pull images, building locally..."
+            $DOCKER_COMPOSE -f docker-compose.prod.yml up -d --build
+          fi
 
           # Wait for containers to be healthy
           echo "Waiting for containers to start..."
           sleep 30
 
-          # Check status
+          # Check status (check both possible compose files)
           echo "Container status:"
-          $DOCKER_COMPOSE -f docker-compose.ghcr.yml ps
+          $DOCKER_COMPOSE -f docker-compose.ghcr.yml ps 2>/dev/null || $DOCKER_COMPOSE -f docker-compose.prod.yml ps
 
           # Test application (check internal port 8080 since no external port is exposed)
           echo "Testing application..."
