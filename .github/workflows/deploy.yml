@@ -1,229 +1,75 @@
-name: Deploy Excalidraw to VM
+name: Deploy to Production
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [master, main]
   workflow_dispatch:
-
-env:
-  GITHUB_REPOSITORY: ${{ github.repository }}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
+    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup SSH key
-      uses: webfactory/ssh-agent@v0.8.0
-      with:
-        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-    - name: Add server to known hosts
-      run: |
-        ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+      - name: Add server to known hosts
+        run: |
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
-    - name: Deploy to server
-      env:
-        GITHUB_REPOSITORY: ${{ github.repository }}
-      run: |
-        ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-          export GITHUB_REPOSITORY="${{ github.repository }}"
-          # Navigate to project directory
-          cd /home/${{ secrets.SSH_USER }}/excalidraw-hosted || {
-            echo "Creating project directory..."
-            mkdir -p /home/${{ secrets.SSH_USER }}/excalidraw-hosted
+      - name: Deploy to server
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            # Navigate to project directory
             cd /home/${{ secrets.SSH_USER }}/excalidraw-hosted
-          }
 
-          # Use your customized repository directly instead of Excalidraw original
-          echo "Cloning your customized Excalidraw repository..."
-          if [ -d "excalidraw-source" ]; then
-            echo "Updating your customized Excalidraw..."
-            cd excalidraw-source
-            # Fix remote URL to point to your repository
-            git remote set-url origin https://github.com/${{ github.repository }}.git
-            echo "Remote URL updated to: https://github.com/${{ github.repository }}.git"
+            # Pull latest changes
+            echo "🔄 Pulling latest code..."
             git pull origin master
-            cd ..
+
+            # Stop existing containers
+            echo "🛑 Stopping existing containers..."
+            docker-compose down || true
+
+            # Remove old images for clean build
+            echo "🗑️ Removing old images..."
+            docker image prune -a -f
+            docker system prune -f
+
+            # Build and deploy
+            echo "🏗️ Building and deploying..."
+            docker-compose up -d --build --force-recreate
+
+            # Wait for container to be healthy
+            echo "⏳ Waiting for container to be healthy..."
+            for i in $(seq 1 30); do
+              if docker exec excalidraw-app curl -f http://localhost/health > /dev/null 2>&1; then
+                echo "✅ Container is healthy!"
+                break
+              fi
+              echo "Waiting... ($i/30)"
+              sleep 10
+            done
+
+            # Show status
+            echo "📊 Container status:"
+            docker-compose ps
+            docker-compose logs --tail=10
+
+            echo "🎉 Deployment complete!"
+          EOF
+
+      - name: Verify deployment
+        run: |
+          echo "🔍 Verifying deployment..."
+          if curl -f -s https://excalidraw.faku.pro/health > /dev/null; then
+            echo "✅ Deployment successful! Site is responding."
           else
-            echo "Cloning your customized repository..."
-            git clone https://github.com/${{ github.repository }}.git excalidraw-source
-          fi
-
-          # Debug: Verify we have your customizations
-          echo "=== DEBUGGING: Verifying your customizations ==="
-          ls -la excalidraw-source/excalidraw-app/components/CustomAuth.tsx 2>/dev/null && echo "✅ CustomAuth found" || echo "❌ CustomAuth missing"
-          grep -q "Welcome to Excalidraw - ITICA" excalidraw-source/excalidraw-app/components/AppWelcomeScreen.tsx 2>/dev/null && echo "✅ Custom branding found" || echo "❌ Custom branding missing"
-
-          # Set up the complete stack
-          echo "Setting up complete Excalidraw stack..."
-
-          # Your repo already has everything, just copy backend files to root level for integrated deployment
-          echo "Setting up backend files for integrated deployment..."
-          cp -r excalidraw-source/backend-example . 2>/dev/null || echo "Backend files already in place"
-          cp -r excalidraw-source/database . 2>/dev/null || echo "Database files already in place"
-
-          # Copy Docker configs for backend
-          cp excalidraw-source/docker-compose.backend.yml . 2>/dev/null || echo "Backend docker-compose not needed"
-
-          echo "Setting up MongoDB and backend..."
-
-          # Try to login to GitHub Container Registry (fallback if no token)
-          echo "Attempting to login to GitHub Container Registry..."
-          if [ -n "${{ secrets.GHCR_TOKEN }}" ]; then
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin && echo "✅ GHCR login successful" || echo "❌ GHCR login failed, will use local build"
-          else
-            echo "⚠️ GHCR_TOKEN not configured, will use local build only"
-          fi
-
-          # Check if docker compose is available (newer version) or docker-compose (legacy)
-          if command -v docker &> /dev/null && docker compose version &> /dev/null; then
-            DOCKER_COMPOSE="docker compose"
-          elif command -v docker-compose &> /dev/null; then
-            DOCKER_COMPOSE="docker-compose"
-          else
-            echo "Installing docker-compose..."
-            sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-            sudo chmod +x /usr/local/bin/docker-compose
-            DOCKER_COMPOSE="docker-compose"
-          fi
-
-          echo "Using: $DOCKER_COMPOSE"
-
-          # Create .env file for docker-compose (safer than export)
-          cat > .env << 'ENVEOF'
-          MONGO_ROOT_PASSWORD=${{ secrets.MONGO_ROOT_PASSWORD }}
-          JWT_SECRET=${{ secrets.JWT_SECRET }}
-          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
-          ENVEOF
-
-          echo "Environment variables written to .env file"
-
-          # Stop existing containers (both frontend and backend)
-          echo "Stopping existing containers..."
-          $DOCKER_COMPOSE -f docker-compose.backend.yml down || true
-          $DOCKER_COMPOSE -f excalidraw-source/docker-compose.ghcr.yml down || true
-          $DOCKER_COMPOSE -f excalidraw-source/docker-compose.prod.yml down || true
-
-          # Debug: Check if backend files exist
-          echo "Checking backend files..."
-          ls -la backend-example/ || echo "backend-example directory not found"
-          ls -la database/ || echo "database directory not found"
-          ls -la docker-compose.backend.yml || echo "docker-compose.backend.yml not found"
-
-          echo "Content of docker-compose.backend.yml:"
-          cat docker-compose.backend.yml | head -30
-
-          echo "Checking .env file:"
-          cat .env || echo ".env file not found"
-
-          # Deploy integrated Excalidraw API (uses existing MongoDB)
-          echo "Deploying Excalidraw API integrated with existing infrastructure..."
-
-          # Copy integrated compose file
-          cp excalidraw-source/docker-compose.integrated.yml .
-
-          $DOCKER_COMPOSE -f docker-compose.integrated.yml up -d --build
-
-          # Show build logs if there are errors
-          echo "Excalidraw API deployment logs:"
-          $DOCKER_COMPOSE -f docker-compose.integrated.yml logs --tail=50
-
-          # Wait for API to be ready
-          echo "Waiting for Excalidraw API to start..."
-          sleep 60
-
-          # Check API health
-          for i in {1..30}; do
-            if curl -f http://localhost:3002/health > /dev/null 2>&1; then
-              echo "✅ Excalidraw API is healthy!"
-              break
-            fi
-            echo "Waiting for Excalidraw API... ($i/30)"
-            sleep 5
-          done
-
-          # Work in excalidraw source directory for frontend
-          cd excalidraw-source
-
-          # Deploy frontend (Force local build to ensure customizations)
-          echo "Deploying frontend with your customizations using local build..."
-
-          # Stop any existing containers first
-          echo "Stopping existing containers..."
-          $DOCKER_COMPOSE -f docker-compose.custom.yml down || true
-          $DOCKER_COMPOSE -f docker-compose.ghcr.yml down || true
-          $DOCKER_COMPOSE -f docker-compose.prod.yml down || true
-
-          # Remove old images to force rebuild
-          echo "Removing old images to force fresh build..."
-          docker image rm excalidraw-hosted-excalidraw || true
-          docker image rm ghcr.io/fakuuy/excalidraw:latest || true
-
-          # Force local build with no cache
-          echo "Building locally from source with your customizations..."
-          $DOCKER_COMPOSE -f docker-compose.custom.yml build --no-cache --pull
-
-          # Deploy with force recreate
-          echo "Deploying freshly built containers..."
-          $DOCKER_COMPOSE -f docker-compose.custom.yml up -d --force-recreate
-
-          # Wait for frontend containers to be healthy
-          echo "Waiting for frontend containers to start..."
-          sleep 30
-
-          # Go back to main directory for status checks
-          cd ..
-
-          # Check status of all services
-          echo "=== BACKEND SERVICES STATUS ==="
-          $DOCKER_COMPOSE -f docker-compose.integrated.yml ps
-
-          echo "=== FRONTEND SERVICES STATUS ==="
-          cd excalidraw-source
-          $DOCKER_COMPOSE -f docker-compose.custom.yml ps
-          cd ..
-
-          # Test all services
-          echo "Testing complete stack..."
-
-          # Test Excalidraw API
-          if curl -f http://localhost:3002/health > /dev/null 2>&1; then
-            echo "✅ Excalidraw API is healthy!"
-          else
-            echo "❌ Excalidraw API is not responding"
+            echo "❌ Deployment may have failed - site not responding"
             exit 1
           fi
-
-          # Test frontend application
-          if curl -f http://localhost:8080/health > /dev/null 2>&1; then
-            echo "✅ Frontend is healthy!"
-          else
-            echo "❌ Frontend is not responding"
-            exit 1
-          fi
-
-          # Database setup is handled by db-init container
-          echo "Database initialization handled by integrated setup"
-
-          echo "🎉 Complete integrated deployment successful!"
-          echo "Frontend: https://excalidraw.faku.pro"
-          echo "Excalidraw API: http://localhost:3002 (internal)"
-          echo "Using existing MongoDB: itica_mongodb"
-        EOF
-
-    - name: Notify deployment status
-      if: always()
-      run: |
-        if [ $? -eq 0 ]; then
-          echo "🎉 Complete stack deployment to excalidraw.faku.pro successful!"
-          echo "✅ MongoDB + Backend API + Frontend all running"
-          echo "🔗 Frontend: https://excalidraw.faku.pro"
-          echo "🔗 Backend: https://api.itica.lat"
-        else
-          echo "❌ Deployment failed!"
-          exit 1
-        fi
