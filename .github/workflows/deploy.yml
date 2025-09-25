@@ -43,6 +43,9 @@ jobs:
           if [ -d "excalidraw-source" ]; then
             echo "Updating your customized Excalidraw..."
             cd excalidraw-source
+            # Fix remote URL to point to your repository
+            git remote set-url origin https://github.com/${{ github.repository }}.git
+            echo "Remote URL updated to: https://github.com/${{ github.repository }}.git"
             git pull origin master
             cd ..
           else
