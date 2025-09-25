@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile.custom
       args:
         - NODE_ENV=production
-    container_name: excalidraw-app-custom
+    container_name: excalidraw-app
     restart: unless-stopped
     expose:
       - "80"
@@ -24,7 +24,7 @@ services:
 
   nginx-proxy:
     image: nginx:alpine
-    container_name: excalidraw-proxy-custom
+    container_name: excalidraw-proxy
     restart: unless-stopped
     expose:
       - "8080"

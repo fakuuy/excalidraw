@@ -1,30 +1,23 @@
-# Custom Dockerfile that skips tests and builds with our modifications
-ARG NODE_VERSION=18
-FROM node:${NODE_VERSION}-alpine
+# Use the working base from main Dockerfile but skip tests
+FROM --platform=${BUILDPLATFORM} node:18 AS build
 
-# Set working directory
 WORKDIR /opt/node_app
 
-# Install dependencies
-COPY package.json yarn.lock ./
-RUN yarn --frozen-lockfile
-
-# Copy source code with our customizations
 COPY . .
 
-# Skip tests and build directly - use NODE_ENV production for build
+# Install all dependencies (including dev deps needed for build)
+RUN --mount=type=cache,target=/root/.cache/yarn \
+    npm_config_target_arch=${TARGETARCH} yarn --network-timeout 600000
+
 ARG NODE_ENV=production
-ENV NODE_ENV=${NODE_ENV}
 
-# Build the application without running tests
-RUN yarn build:app:docker --skip-tests || \
-    yarn build:app --skip-tests || \
-    npm_config_target_arch=${TARGETARCH:-x64} yarn build:app:docker || \
-    echo "Build completed with potential warnings"
+# Build the app with custom settings
+RUN VITE_APP_DISABLE_SENTRY=true yarn build:app:docker || \
+    npm_config_target_arch=${TARGETARCH:-x64} yarn build:app:docker
 
-# Use nginx for serving
-FROM nginx:1.27-alpine
-COPY --from=0 /opt/node_app/build /usr/share/nginx/html
+FROM --platform=${TARGETPLATFORM} nginx:1.27-alpine
+
+COPY --from=build /opt/node_app/excalidraw-app/build /usr/share/nginx/html
 
 # Custom nginx config for SPA
 RUN echo 'server { \
