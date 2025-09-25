@@ -149,25 +149,27 @@ jobs:
           # Work in excalidraw source directory for frontend
           cd excalidraw-source
 
-          # Deploy frontend (GHCR or local build)
-          echo "Deploying frontend with your customizations..."
+          # Deploy frontend (Force local build to ensure customizations)
+          echo "Deploying frontend with your customizations using local build..."
 
-          # Check if GHCR is available and token is configured
-          if [ -n "${{ secrets.GHCR_TOKEN }}" ] && [ -f "docker-compose.ghcr.yml" ] && docker info >/dev/null 2>&1; then
-            echo "Attempting GHCR deployment..."
-            if $DOCKER_COMPOSE -f docker-compose.ghcr.yml build --no-cache && $DOCKER_COMPOSE -f docker-compose.ghcr.yml push; then
-              echo "✅ GHCR build and push successful, deploying from registry..."
-              $DOCKER_COMPOSE -f docker-compose.ghcr.yml up -d --force-recreate
-            else
-              echo "❌ GHCR build/push failed, falling back to local build..."
-              $DOCKER_COMPOSE -f docker-compose.custom.yml build --no-cache
-              $DOCKER_COMPOSE -f docker-compose.custom.yml up -d --force-recreate
-            fi
-          else
-            echo "Using local build (GHCR not available)..."
-            $DOCKER_COMPOSE -f docker-compose.custom.yml build --no-cache
-            $DOCKER_COMPOSE -f docker-compose.custom.yml up -d --force-recreate
-          fi
+          # Stop any existing containers first
+          echo "Stopping existing containers..."
+          $DOCKER_COMPOSE -f docker-compose.custom.yml down || true
+          $DOCKER_COMPOSE -f docker-compose.ghcr.yml down || true
+          $DOCKER_COMPOSE -f docker-compose.prod.yml down || true
+
+          # Remove old images to force rebuild
+          echo "Removing old images to force fresh build..."
+          docker image rm excalidraw-hosted-excalidraw || true
+          docker image rm ghcr.io/fakuuy/excalidraw:latest || true
+
+          # Force local build with no cache
+          echo "Building locally from source with your customizations..."
+          $DOCKER_COMPOSE -f docker-compose.custom.yml build --no-cache --pull
+
+          # Deploy with force recreate
+          echo "Deploying freshly built containers..."
+          $DOCKER_COMPOSE -f docker-compose.custom.yml up -d --force-recreate
 
           # Wait for frontend containers to be healthy
           echo "Waiting for frontend containers to start..."
@@ -182,13 +184,7 @@ jobs:
 
           echo "=== FRONTEND SERVICES STATUS ==="
           cd excalidraw-source
-          if [ -f "docker-compose.ghcr.yml" ]; then
-            $DOCKER_COMPOSE -f docker-compose.ghcr.yml ps
-          elif [ -f "docker-compose.custom.yml" ]; then
-            $DOCKER_COMPOSE -f docker-compose.custom.yml ps
-          else
-            $DOCKER_COMPOSE -f docker-compose.prod.yml ps
-          fi
+          $DOCKER_COMPOSE -f docker-compose.custom.yml ps
           cd ..
 
           # Test all services
