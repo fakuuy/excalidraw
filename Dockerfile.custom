@@ -1,30 +1,23 @@
-# Simple Dockerfile without buildx dependencies
-FROM node:18-alpine AS builder
+# Use the working base from main Dockerfile but skip tests
+FROM --platform=${BUILDPLATFORM} node:18 AS build
 
-# Set working directory
 WORKDIR /opt/node_app
 
-# Install dependencies
-COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile --network-timeout 300000
-
-# Copy source code
 COPY . .
 
-# Set environment
-ENV NODE_ENV=production
+# Install all dependencies (including dev deps needed for build)
+RUN --mount=type=cache,target=/root/.cache/yarn \
+    npm_config_target_arch=${TARGETARCH} yarn --network-timeout 600000
 
-# Build without tests - simplified approach
-RUN echo "Building Excalidraw app..." && \
-    yarn build:app:docker || \
-    (echo "Standard build failed, trying alternative..." && yarn build:app) || \
-    (echo "Alternative build failed, trying direct vite build..." && cd excalidraw-app && yarn build) || \
-    echo "Build completed with warnings"
+ARG NODE_ENV=production
 
-# Production stage with nginx
-FROM nginx:alpine
-COPY --from=builder /opt/node_app/build /usr/share/nginx/html
-COPY --from=builder /opt/node_app/excalidraw-app/dist /usr/share/nginx/html
+# Build the app with custom settings
+RUN VITE_APP_DISABLE_SENTRY=true yarn build:app:docker || \
+    npm_config_target_arch=${TARGETARCH:-x64} yarn build:app:docker
+
+FROM --platform=${TARGETPLATFORM} nginx:1.27-alpine
+
+COPY --from=build /opt/node_app/excalidraw-app/build /usr/share/nginx/html
 
 # Simple nginx config
 RUN echo 'server { \
